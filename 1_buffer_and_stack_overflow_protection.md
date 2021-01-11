@@ -1,14 +1,36 @@
-# Buffer and Stack Overflow Protection
+# 嵌入式安全最佳实践-1缓冲区及栈溢出保护
 
-Prevent the use of known dangerous functions and APIs in effort to protect against memory-corruption vulnerabilities within firmware. \(e.g. Use of [unsafe C functions](https://www.securecoding.cert.org/confluence/display/c/VOID+MSC34-C.+Do+not+use+deprecated+and+obsolete+functions) - [strcat, strcpy, sprintf, scanf](http://cwe.mitre.org/data/definitions/676.html#Demonstrative%20Examples%29%29%20). Memory-corruption vulnerabilities, such as buffer overflows, can consist of overflowing the stack \([Stack overflow](https://en.wikipedia.org/wiki/Stack_buffer_overflow%29\) or overflowing the heap \([Heap overflow](https://en.wikipedia.org/wiki/Heap_overflow%29\). For simplicity purposes, this document does not distinguish between these two types of vulnerabilities. In the event a buffer overflow has been detected and exploited by an attacker, the instruction pointer register is overwritten to execute the arbitrary malicious code provided by the attacker.
+> 原文：[Buffer and Stack Overflow Protection](https://scriptingxss.gitbook.io/embedded-appsec-best-practices/1_buffer_and_stack_overflow_protection) 
+>
+> 作者：[Aaron Guzman](https://www.linkedin.com/in/scriptingxss/) [@scriptingxss](https://twitter.com/scriptingxss)
+>
+> 译者：[Shiro](https://blog.ffxiv.cat)
+>
+> 笔者能力不足水平有限，翻译不准确、遗漏、疏忽的地方请发送邮件或评论留言指出。
 
-**Finding Vulnerable C functions in source code. Example: Utilize the “find” command below within a “C” repository to find vulnerable C functions such as "strncpy" and "strlen" in source code.**
+
+
+在固件中应避免使用公开的危险函数以防止内存损坏漏洞。
+
+例：使用[不安全的C语言函数](https://www.securecoding.cert.org/confluence/display/c/VOID+MSC34-C.+Do+not+use+deprecated+and+obsolete+functions) - [strcat, strcpy, sprintf, scanf](http://cwe.mitre.org/data/definitions/676.html#Demonstrative%20Examples%29%29%20). 
+
+内存损坏漏洞如缓冲区溢出，包含有[栈溢出](https://en.wikipedia.org/wiki/Stack_buffer_overflow%29\)和[堆溢出](https://en.wikipedia.org/wiki/Heap_overflow%29\)，简单起见，本文不区分这两种类型的漏洞。当攻击者挖出缓冲区溢出漏洞并成功利用后，受害者的PC指针寄存器会被覆写用以执行攻击者发送的恶意代码。
+
+
+
+
+
+### 在源码中找出存在漏洞的函数 
+
+**示例：**
+
+**使用“Find”命令在源码中查找“strncpy” “strlen”之类有缺陷的函数**
 
 ```text
 find . -type f -name '*.c' -print0|xargs -0 grep -e 'strncpy.*strlen'|wc -l
 ```
 
-**An OR grep expression could be utilized with the following expression:**
+**使用grep的正则表达式**
 
 ```text
 $ grep -E '(strcpy|strcat|strncat|sprintf|strlen|memcpy|fopen|gets)' fuzzgoat.c
@@ -38,7 +60,7 @@ $ grep -E '(strcpy|strcat|strncat|sprintf|strlen|memcpy|fopen|gets)' fuzzgoat.c
          strcpy (error_buf, "Unknown error");
 ```
 
-**Below, example output of flawfinder is shown run against C source code.**
+**使用Flawfinder工具进行代码审计**
 
 ```text
 $ flawfinder fuzzgoat.c 
@@ -85,9 +107,13 @@ See 'Secure Programming for Linux and Unix HOWTO'
 (http://www.dwheeler.com/secure-programs) for more information.
 ```
 
-Usage of deprecated functions, [**Noncompliant Code Example**](https://www.securecoding.cert.org/confluence/display/c/VOID+STR35-C.+Do+not+copy+data+from+an+unbounded+source+to+a+fixed-length+array):This noncompliant code example assumes that gets\(\) will not read more than BUFSIZ - 1 characters from stdin. This is an invalid assumption, and the resulting operation can cause a buffer overflow. Note further that BUFSIZ is a macro integer constant, defined in stdio.h, representing a suggested argument to setvbuf\(\) and not the maximum size of such an input buffer.
 
-The gets\(\) function reads characters from the stdin into a destination array until end-of-file is encountered or a newline character is read. Any newline character is discarded, and a null character is written immediately after the last character read into the array.
+
+### 使用不安全的函数  
+
+[**不安全代码示例**](https://www.securecoding.cert.org/confluence/display/c/VOID+STR35-C.+Do+not+copy+data+from+an+unbounded+source+to+a+fixed-length+array): 下图的代码预设了gets()函数最多会从stdin读取(BUFSIZ-1)个字符。而实际操作中该预设并无约束，且可能会导致缓冲区溢出。要注意的是，BUFSIZ是一个在stdio.h中定义的常量，其仅表示setvbuf\(\)的建议值，并不代表输入缓冲区的最大值。
+
+gets(\)函数作用为 将stdin中的字符读取到目标数组中，当遇到EOF或换行符时结束读取，删掉换行符，并在数组的末尾追加一个空字符。
 
 ```c
 #include <stdio.h>
@@ -100,7 +126,9 @@ void func(void) {
 }
 ```
 
-**Compliant Example**: The fgets\(\) function reads, at most, one less than a specified number of characters from a stream into an array. This solution is compliant because the number of bytes copied from stdin to buf cannot exceed the allocated memory:
+**合规代码示例**: 
+
+下面的代码中 fgets\(\) 最多只能从stdin中读取(BUFFERSIZE-1)个字符，读进缓冲区的字节不会超过给它分配的大小，因此这个方案安全、合规。
 
 ```c
 #include <stdio.h>
@@ -130,11 +158,15 @@ void func(void) {
 }
 ```
 
-strncat\(\) is a variation on the original strcat\(\) library function. Both are used to append one NULL terminated C string to another. The danger with the original strcat\(\) was that the caller might provide more data than can fit into the receiving buffer, thereby overrunning it. The most common result of this is a segmentation violation. A worse result is the silent and undetected corruption of whatever followed the receiving buffer in memory.
 
-strncat\(\) adds an additional parameter allowing the user to specify the maximum number of bytes to copy. This is NOT the amount of data to copy. It is NOT the size of the source data. It is a limit to the amount of data to copy and is usually set to the size of the receiving buffer.
 
-**Compliant Example usage of “strncat”:**
+strncat\(\) 是库函数strcat()的一个变种。两者均用来拼接字符串。原函数strcat()的危险点在于调用方可能会传入一个大于接收缓冲区的数据导致溢出。一般情况的后果是出现段错误，严重的后果则可能破坏缓冲区之后的内存undetected and silent
+
+strncat\(\) 追加了一个额外参数用于指定要复制的最大字节数，注意这个数**不是要复制的字节数**，也**不是源字符串的字符数**。这个参数应当设置为接收缓冲区的最大值。
+
+
+
+**strncat()的正确用法:**
 
 ```c
 char buffer[SOME_SIZE];
@@ -142,17 +174,26 @@ char buffer[SOME_SIZE];
 strncat( buffer, SOME_DATA, sizeof(buffer)-1);
 ```
 
-**NonCompliant Example usage of “strncat**”**:**
+**strncat()的错误用法**”**:**
 
 ```c
 strncat( buffer, SOME_DATA, strlen( SOME_DATA ));
 ```
 
-The screenshot below demonstrates stack protection support being enabled while building a firmware image utilizing buildroot.  
+
+
+下面的截图演示了如何在用buildroot构建固件镜像时开启堆栈保护
+
 ![](.gitbook/assets/embedsec1.png)
 
-**Considerations:**
+**注意事项:**
 
+* 使用哪种缓冲区？它的物理地址、逻辑地址、虚拟内存地址分别是多少？
+* 缓冲区释放或从缓存淘汰后，该地址上残余的数据是什么？
+* 如何保证原有的缓冲区不会泄露数据？（比如使用后清零？）
+* 分配缓冲区时要初始化成特定值
+* 设计在何处放置变量：放置在栈上？静态区域？或者动态分配？
+* 
 * What kind of buffer and where it resides: physical, logical, virtual memory?
 * What data will remain when the buffer is freed or left around to LRU out?
 * What strategy will be followed to ensure old buffers do not leak data \(example: clear buffer after use\)?
@@ -169,7 +210,9 @@ The screenshot below demonstrates stack protection support being enabled while b
 * Those functions that do not have safe equivalents should be rewritten with safe checks implemented.
 * If FreeRTOS OS is utilized, consider setting "configCHECK\_FOR\_STACK\_OVERFLOW" to "1" with a hook function during the development and testing phases but removing for production builds. 
 
-## Additional References <a id="additional-references"></a>
+
+
+## 更多参考文献
 
 * OSS \(Open Source Software\) Static Analysis Tools
   * Use of [flawfinder](http://www.dwheeler.com/flawfinder/) and [PMD](https://pmd.github.io/) for C
