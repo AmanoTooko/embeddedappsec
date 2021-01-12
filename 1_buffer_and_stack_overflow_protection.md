@@ -6,7 +6,7 @@
 >
 > 译者：[Shiro](https://blog.ffxiv.cat)
 >
-> 笔者能力不足水平有限，翻译不准确、遗漏、疏忽的地方请发送邮件或评论留言指出。
+> 译者能力不足水平有限，翻译不准确、遗漏、疏忽的地方请发送邮件或评论留言指出。
 
 
 
@@ -126,7 +126,7 @@ void func(void) {
 }
 ```
 
-**合规代码示例**: 
+**安全代码示例**: 
 
 下面的代码中 fgets\(\) 最多只能从stdin中读取(BUFFERSIZE-1)个字符，读进缓冲区的字节不会超过给它分配的大小，因此这个方案安全、合规。
 
@@ -160,7 +160,7 @@ void func(void) {
 
 
 
-strncat\(\) 是库函数strcat()的一个变种。两者均用来拼接字符串。原函数strcat()的危险点在于调用方可能会传入一个大于接收缓冲区的数据导致溢出。一般情况的后果是出现段错误，严重的后果则可能破坏缓冲区之后的内存undetected and silent
+strncat\(\) 是库函数strcat()的一个变种。两者均用来拼接字符串。原函数strcat()的危险点在于调用方可能会传入一个大于接收缓冲区的数据导致溢出。一般情况的后果是出现段错误，严重的后果则可能破坏缓冲区之后的内存且无人发现。
 
 strncat\(\) 追加了一个额外参数用于指定要复制的最大字节数，注意这个数**不是要复制的字节数**，也**不是源字符串的字符数**。这个参数应当设置为接收缓冲区的最大值。
 
@@ -189,30 +189,24 @@ strncat( buffer, SOME_DATA, strlen( SOME_DATA ));
 **注意事项:**
 
 * 使用哪种缓冲区？它的物理地址、逻辑地址、虚拟内存地址分别是多少？
-* 缓冲区释放或从缓存淘汰后，该地址上残余的数据是什么？
-* 如何保证原有的缓冲区不会泄露数据？（比如使用后清零？）
+* 缓冲区释放或从缓存被淘汰后，该地址上残余的数据是什么？
+* 如何保证原有的缓冲区不会泄露数据？（如使用后清零？）
 * 分配缓冲区时要初始化成特定值
-* 设计在何处放置变量：放置在栈上？静态区域？或者动态分配？
-* 
-* What kind of buffer and where it resides: physical, logical, virtual memory?
-* What data will remain when the buffer is freed or left around to LRU out?
-* What strategy will be followed to ensure old buffers do not leak data \(example: clear buffer after use\)?
-* Initialize buffers to known value on allocation.
-* Consider where variables are stored: stack, static or allocated structure.
-* Dispose and securely wipe sensitive information stored in buffers or temporary files during runtime after they are no longer needed \(e.g. Wipe buffers from locations where personally identifiable information\(PII\) is stored before releasing the buffers\).
-* Explicitly initialize variables.
-* Ensure secure compiler flags or switches are utilized upon each firmware build. \(e.g. For GCC -fPIE, -fstack-protector-all, -Wl,-z,noexecstack, -Wl,-z,noexecheap etc.. See additional references section for more details.\)
-* Use safe equivalent functions for known vulnerable functions such as \(non-exhaustive list below\):
+* 设计时考虑在何处放置变量：放置在栈上？放在静态区域？或者动态分配？
+* 存储在缓冲区和临时文件中的敏感信息在释放前先进行安全擦除，例：释放缓冲区前先清空其中存储的个人信息
+* 显式地初始化变量（译者注：与第四条接近，但是此条针对的是变量，第四条针对的是缓冲区）
+* 编译固件时设置安全的编译选项或编译开关（ 例：对于GCC，设置 -fPIE, -fstack-protector-all, -Wl,-z,noexecstack, -Wl,-z,noexecheap 等，查看扩展阅读了解更多选项）
+* 对于已知的不安全函数使用安全的替代函数，下面是个不完全的列举
   * `gets() -> fgets()`
   * `strcpy() -> strncpy()`
   * `strcat() -> strncat()`
   * `sprintf() -> snprintf()`
-* Those functions that do not have safe equivalents should be rewritten with safe checks implemented.
-* If FreeRTOS OS is utilized, consider setting "configCHECK\_FOR\_STACK\_OVERFLOW" to "1" with a hook function during the development and testing phases but removing for production builds. 
+* 没有安全替代的函数时需要重新写一个有安全检查的实现
+* 如果使用了FreeRTOS系统，在开发测试阶段设置"configCHECK\_FOR\_STACK\_OVERFLOW"为1并配置相关回调函数，但在编译生产版本时去除掉该Flag
 
 
 
-## 更多参考文献
+## 扩展阅读
 
 * OSS \(Open Source Software\) Static Analysis Tools
   * Use of [flawfinder](http://www.dwheeler.com/flawfinder/) and [PMD](https://pmd.github.io/) for C
